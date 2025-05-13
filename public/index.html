@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ESP Monitoring</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 0;
+      height: 100vh;
+      background: linear-gradient(135deg, #74ebd5, #acb6e5);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+    }
+
+    .container {
+      background: white;
+      border-radius: 16px;
+      padding: 30px 40px;
+      max-width: 400px;
+      width: 100%;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.1);
+      text-align: center;
+    }
+
+    h2 {
+      margin-bottom: 25px;
+      color: #333;
+    }
+
+    .card p {
+      font-size: 16px;
+      margin: 12px 0;
+      color: #555;
+    }
+
+    .card span {
+      font-weight: bold;
+      color: #00b894;
+    }
+
+    button {
+      margin-top: 25px;
+      padding: 12px 25px;
+      font-size: 16px;
+      background: linear-gradient(135deg, #6a11cb, #2575fc);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+      transition: transform 0.2s ease, background 0.3s ease;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      background: linear-gradient(135deg, #5d0be3, #1e63f3);
+    }
+
+    .credits {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      font-size: 13px;
+      background: rgba(255, 255, 255, 0.6);
+      padding: 6px 12px;
+      border-radius: 10px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+      font-weight: 500;
+    }
+
+    @media (max-width: 500px) {
+      .container {
+        margin: 20px;
+        padding: 20px;
+      }
+
+      .card p {
+        font-size: 14px;
+      }
+
+      button {
+        width: 100%;
+      }
+
+      .credits {
+        font-size: 11px;
+        padding: 4px 8px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Gravity Battery System 🔋</h2>
+    <div class="card">
+      <p><strong>Distance:</strong> <span id="distance">--</span> cm</p>
+      <p><strong>Battery:</strong> <span id="battery">--</span>%</p>
+      <p><strong>Current:</strong> <span id="current">--</span> mA</p>
+      <p><strong>Power:</strong> <span id="power">--</span> mW</p>
+      <button onclick="trigger()">⚡ Trigger Pin</button>
+    </div>
+  </div>
+
+  <div class="credits">
+    Project by Gopala Krishnan & Kirubakaran
+  </div>
+
+  <script>
+    async function fetchData() {
+      try {
+        const res = await fetch('/api/data');
+        const data = await res.json();
+        const distance = data.distance.toFixed(2);
+        const battery = data.battery;
+        const current = (data.current.toFixed(2) * 1000).toFixed(0);
+        const power = (data.power.toFixed(2) * 1000).toFixed(0);
+
+        document.getElementById('distance').innerText = distance;
+        document.getElementById('battery').innerText = battery;
+        document.getElementById('current').innerText = current <= 0 ? 0 : current;
+        document.getElementById('power').innerText = power <= 0 ? 0 : power;
+      } catch (error) {
+        console.error("Error fetching data:", error);
+      }
+    }
+
+    async function trigger() {
+      try {
+        const res = await fetch('/api/trigger', { method: 'POST' });
+        const text = await res.text();
+        alert(text);
+      } catch (error) {
+        alert("Trigger failed.");
+      }
+    }
+
+    setInterval(fetchData, 500);
+    fetchData();
+  </script>
+</body>
+</html>
