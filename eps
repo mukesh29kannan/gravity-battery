@@ -1,0 +1,127 @@
+#include <ESP8266WiFi.h>
+#include <WiFiClientSecure.h>
+#include <ESP8266HTTPClient.h>
+
+// Replace with your Wi-Fi credentials
+const char* ssid = "fusion";
+const char* password = "12345678";
+
+// Replace with your Node.js server IP and port
+const char* serverUrl = "https://gravity-battery.onrender.com/api/data";
+const char* triggerUrl = "https://gravity-battery.onrender.com/api/trigger";
+
+// Define NodeMCU pins using their GPIO numbers
+// NodeMCU D1 -> GPIO5, D2 -> GPIO4, D5 -> GPIO14
+#define TRIG_PIN 5      // Used for ultrasonic sensor TRIG
+#define ECHO_PIN 4      // Used for ultrasonic sensor ECHO
+#define TRIGGER_PIN 14  // Digital output to be triggered
+#define BATTERY_PIN 12
+#define CURRENT_SENSOR A0
+
+unsigned long lastSent = 0;
+const int sendInterval = 3000; // 3 seconds
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+
+  // Set up pins
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+  pinMode(TRIGGER_PIN, OUTPUT);
+  pinMode(BATTERY_PIN, OUTPUT);
+  digitalWrite(TRIGGER_PIN, LOW);
+  digitalWrite(BATTERY_PIN, LOW);
+
+  // Connect to Wi-Fi
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to Wi-Fi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWi-Fi connected!");
+}
+
+void loop() {
+  if (WiFi.status() == WL_CONNECTED) {
+    // Send sensor data every sendInterval milliseconds
+    if (millis() - lastSent > sendInterval) {
+      float distance = getDistanceCM();
+      int battery = constrain(map(distance, 0, 90, 0, 100), 0, 100);
+      if (battery >= 100){
+        digitalWrite(BATTERY_PIN, HIGH);
+      }
+      else{
+        digitalWrite(BATTERY_PIN, LOW);
+      }
+      // The ESP8266 ADC reference is 3.3V
+      float voltage = analogRead(CURRENT_SENSOR) * (3.3 / 1023.0);
+      // For ACS712-5A, the sensor outputs 2.5V at 0 current.
+      // Sensitivity is around 0.185 V/A.
+      float current = ((voltage - 0) / 0.185)-9.6;
+      float power = current * 9.0; // Assuming 230V load
+
+      // Create JSON payload
+      String json = "{\"distance\":" + String(distance) + 
+                    ",\"battery\":" + String(battery) +
+                    ",\"current\":" + String(current) +
+                    ",\"power\":" + String(power) + "}";
+      
+      // Send the data to Node.js server
+      WiFiClientSecure client;
+      client.setInsecure(); 
+
+      HTTPClient http;
+      http.begin(client, serverUrl);
+      http.addHeader("Content-Type", "application/json");
+
+      int httpCode = http.POST(json);
+      Serial.println("Sent data: " + json);
+      Serial.println("Response: " + String(httpCode));
+      http.end();
+
+      lastSent = millis();
+    }
+
+    // Check for trigger command from the server
+    WiFiClientSecure client;
+    client.setInsecure();
+
+    HTTPClient http;
+    http.begin(client, triggerUrl);
+    int code = http.GET();
+    if (code == 200) {
+      String res = http.getString();
+      if (res == "1") {
+        Serial.println("Triggering digital pin...");
+        digitalWrite(TRIGGER_PIN, HIGH);
+        delay(1000);
+        digitalWrite(TRIGGER_PIN, LOW);
+      }
+    }
+    http.end();
+  } 
+  else {
+    Serial.println("Wi-Fi not connected, retrying...");
+    WiFi.begin(ssid, password);
+    delay(2000);
+  }
+
+  delay(500);  // Main loop delay
+}
+
+float getDistanceCM() {
+  // Ensure trigger is LOW before starting
+  digitalWrite(TRIG_PIN, LOW);
+  delayMicroseconds(2);
+  
+  // Trigger the ultrasonic burst
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_PIN, LOW);
+  
+  // Read the echo time and convert to distance in cm
+  long duration = pulseIn(ECHO_PIN, HIGH);
+  return duration * 0.034 / 2; // Speed of sound is ~0.034 cm per microsecond
+}
