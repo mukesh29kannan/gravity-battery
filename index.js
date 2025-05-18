@@ -65,28 +65,43 @@ const wss = new WebSocket.Server({ server, path: '/ws' });
 let espSocket = null;
 
 wss.on('connection', socket => {
-  console.log('Client connected');
+  console.log('WebSocket client connected');
 
   socket.on('message', msg => {
     try {
       const data = JSON.parse(msg);
-      // Broadcast to web clients
-      wss.clients.forEach(client => {
-        if (client !== socket && client.readyState === WebSocket.OPEN)
-          client.send(msg);
-      });
-    } catch (e) {
-      // Message is a command from web app
-      if (socket !== espSocket && espSocket) espSocket.send(msg);
-    }
 
-    // Save ESP32 socket
-    if (!espSocket && msg.includes("temp")) {
-      espSocket = socket;
+      // If it contains sensor data, assume it's from ESP
+      if (data.temp !== undefined || data.humidity !== undefined || data.current !== undefined) {
+        if (!espSocket) espSocket = socket;
+
+        // Broadcast to all clients
+        wss.clients.forEach(client => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(msg);
+          }
+        });
+
+        console.log('Data from ESP32:', data);
+      } else {
+        // If it's not ESP data, maybe a control message from web app
+        if (espSocket && espSocket.readyState === WebSocket.OPEN) {
+          espSocket.send(msg);
+          console.log('Control message sent to ESP32:', msg);
+        }
+      }
+
+    } catch (e) {
+      console.error('Invalid message received:', msg);
     }
   });
 
   socket.on('close', () => {
-    if (socket === espSocket) espSocket = null;
+    if (socket === espSocket) {
+      espSocket = null;
+      console.log('ESP32 disconnected');
+    } else {
+      console.log('Web client disconnected');
+    }
   });
 });

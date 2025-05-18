@@ -2,42 +2,82 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>ESP32 Sensor Dashboard</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f3f3f3;
+      padding: 20px;
+      color: #333;
+    }
+    h1 {
+      text-align: center;
+    }
+    .container {
+      max-width: 500px;
+      margin: auto;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .sensor {
+      font-size: 18px;
+      margin: 10px 0;
+    }
+    .relay-status {
+      margin-top: 20px;
+      font-weight: bold;
+      color: #007BFF;
+    }
+  </style>
 </head>
 <body>
-  <h2>Sensor Dashboard</h2>
-  <p>Temperature: <span id="temp">--</span> °C</p>
-  <p>Humidity: <span id="humidity">--</span> %</p>
-  <p>Current: <span id="current">--</span> A</p>
-  <p>Relay Status: <span id="relay">OFF</span></p>
-
-  <label>Max Temp: <input type="number" id="maxtemp" value="30" /></label>
-  <button onclick="sendMaxTemp()">Set Max Temp</button><br><br>
-
-  <label>Timer (seconds): <input type="number" id="timer" value="60" /></label>
-  <button onclick="startTimer()">Start</button>
+  <div class="container">
+    <h1>ESP32 Sensor Dashboard</h1>
+    <div class="sensor" id="temperature">Temperature: -- °C</div>
+    <div class="sensor" id="humidity">Humidity: -- %</div>
+    <div class="sensor" id="current">Current: -- A</div>
+    <div class="relay-status" id="relay">Relay: --</div>
+  </div>
 
   <script>
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
-    console.log(`ws://${location.host}/ws`)
-    ws.onmessage = (msg) => {
-      const data = JSON.parse(msg.data);
-      document.getElementById('temp').innerText = data.temp.toFixed(1);
-      document.getElementById('humidity').innerText = data.humidity.toFixed(1);
-      document.getElementById('current').innerText = data.current;
-      document.getElementById('relay').innerText = data.relay ? "ON" : "OFF";
+    const ws = new WebSocket(`ws://${location.host}/ws`);
+
+    ws.onopen = () => {
+      console.log("WebSocket connected");
     };
 
-    function sendMaxTemp() {
-      const temp = document.getElementById('maxtemp').value;
-      ws.send("maxtemp:" + temp);
-    }
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log("Received:", data);
 
-    function startTimer() {
-      const time = document.getElementById('timer').value;
-      ws.send("start:" + time);
-    }
+        if (data.temp !== undefined) {
+          document.getElementById('temperature').textContent = `Temperature: ${data.temp.toFixed(2)} °C`;
+        }
+
+        if (data.humidity !== undefined) {
+          document.getElementById('humidity').textContent = `Humidity: ${data.humidity.toFixed(2)} %`;
+        }
+
+        if (data.current !== undefined) {
+          document.getElementById('current').textContent = `Current: ${data.current.toFixed(2)} A`;
+        }
+
+        if (data.relay !== undefined) {
+          document.getElementById('relay').textContent = `Relay: ${data.relay === 1 ? 'ON' : 'OFF'}`;
+        }
+
+      } catch (err) {
+        console.error("Invalid message:", event.data);
+      }
+    };
+
+    ws.onclose = () => {
+      console.warn("WebSocket disconnected");
+    };
   </script>
 </body>
 </html>
