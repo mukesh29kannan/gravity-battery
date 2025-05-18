@@ -5,6 +5,21 @@ const path = require('path');
 
 const app = express();
 
+let sensorData = {
+  temp: 0,
+  humidity: 0,
+  current: 0,
+  relay: false
+};
+
+let controlSettings = {
+  start: false,
+  maxTemp: 0,
+  timerSeconds: 0
+};
+
+let timerInterval = null;
+
 // Allow all origins explicitly
 app.use(cors({
   origin: '*',
@@ -56,52 +71,49 @@ app.get('/prob', (req, res) => {
   });
 });
 
-const server = app.listen(3000, () => {
+app.post('/api/sensor-data', (req, res) => {
+  sensorData = req.body;
+  console.log('Updated sensor data:', sensorData);
+
+  // Auto shutoff if temp exceeds max
+  if (controlSettings.maxTemp && sensorData.temp >= controlSettings.maxTemp) {
+    controlSettings.start = false;
+  }
+
+  res.sendStatus(200);
+});
+
+app.get('/api/sensor-data', (req, res) => {
+  res.json(sensorData);
+});
+
+app.get('/api/control', (req, res) => {
+  res.json(controlSettings);
+});
+
+app.post('/api/control', (req, res) => {
+  const { start, maxTemp, timerSeconds } = req.body;
+  if (start !== undefined) controlSettings.start = start;
+  if (maxTemp !== undefined) controlSettings.maxTemp = maxTemp;
+  if (timerSeconds !== undefined) {
+    controlSettings.timerSeconds = timerSeconds;
+    if (timerInterval) clearInterval(timerInterval);
+    if (timerSeconds > 0) {
+      timerInterval = setInterval(() => {
+        controlSettings.timerSeconds--;
+        if (controlSettings.timerSeconds <= 0) {
+          controlSettings.start = false;
+          clearInterval(timerInterval);
+        }
+      }, 1000);
+    }
+  }
+
+  console.log('Updated control settings:', controlSettings);
+  res.sendStatus(200);
+});
+
+app.listen(3000, () => {
   console.log('Server running at http://localhost:3000');
 });
 
-const wss = new WebSocket.Server({ server, path: '/ws' });
-
-let espSocket = null;
-
-wss.on('connection', socket => {
-  console.log('WebSocket client connected');
-
-  socket.on('message', msg => {
-    try {
-      const data = JSON.parse(msg);
-
-      // If it contains sensor data, assume it's from ESP
-      if (data.temp !== undefined || data.humidity !== undefined || data.current !== undefined) {
-        if (!espSocket) espSocket = socket;
-
-        // Broadcast to all clients
-        wss.clients.forEach(client => {
-          if (client.readyState === WebSocket.OPEN) {
-            client.send(msg);
-          }
-        });
-
-        console.log('Data from ESP32:', data);
-      } else {
-        // If it's not ESP data, maybe a control message from web app
-        if (espSocket && espSocket.readyState === WebSocket.OPEN) {
-          espSocket.send(msg);
-          console.log('Control message sent to ESP32:', msg);
-        }
-      }
-
-    } catch (e) {
-      console.error('Invalid message received:', msg);
-    }
-  });
-
-  socket.on('close', () => {
-    if (socket === espSocket) {
-      espSocket = null;
-      console.log('ESP32 disconnected');
-    } else {
-      console.log('Web client disconnected');
-    }
-  });
-});
