@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>ESP32 Sensor Dashboard</title>
+</head>
+<body>
+  <h2>Sensor Dashboard</h2>
+  <p>Temperature: <span id="temp">--</span> °C</p>
+  <p>Humidity: <span id="humidity">--</span> %</p>
+  <p>Current: <span id="current">--</span> A</p>
+  <p>Relay Status: <span id="relay">OFF</span></p>
+
+  <label>Max Temp: <input type="number" id="maxtemp" value="30" /></label>
+  <button onclick="sendMaxTemp()">Set Max Temp</button><br><br>
+
+  <label>Timer (seconds): <input type="number" id="timer" value="60" /></label>
+  <button onclick="startTimer()">Start</button>
+
+  <script>
+    const ws = new WebSocket(`ws://${location.host}/ws`);
+    ws.onmessage = (msg) => {
+      const data = JSON.parse(msg.data);
+      document.getElementById('temp').innerText = data.temp.toFixed(1);
+      document.getElementById('humidity').innerText = data.humidity.toFixed(1);
+      document.getElementById('current').innerText = data.current;
+      document.getElementById('relay').innerText = data.relay ? "ON" : "OFF";
+    };
+
+    function sendMaxTemp() {
+      const temp = document.getElementById('maxtemp').value;
+      ws.send("maxtemp:" + temp);
+    }
+
+    function startTimer() {
+      const time = document.getElementById('timer').value;
+      ws.send("start:" + time);
+    }
+  </script>
+</body>
+</html>

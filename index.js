@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const WebSocket = require('ws');
 
 const app = express();
 
@@ -43,6 +44,47 @@ app.post('/api/trigger', (req, res) => {
   res.send('Triggered');
 });
 
-app.listen(3000, () => {
+app.get('/prob', (req, res) => {
+  const filePath = path.join(__dirname, 'public', `indextwo.html`);
+
+  res.sendFile(filePath, err => {
+    if (err) {
+      res.status(404).send('Page not found');
+    }
+  });
+});
+
+const server = app.listen(3000, () => {
   console.log('Server running at http://localhost:3000');
+});
+
+const wss = new WebSocket.Server({ server, path: '/ws' });
+
+let espSocket = null;
+
+wss.on('connection', socket => {
+  console.log('Client connected');
+
+  socket.on('message', msg => {
+    try {
+      const data = JSON.parse(msg);
+      // Broadcast to web clients
+      wss.clients.forEach(client => {
+        if (client !== socket && client.readyState === WebSocket.OPEN)
+          client.send(msg);
+      });
+    } catch (e) {
+      // Message is a command from web app
+      if (socket !== espSocket && espSocket) espSocket.send(msg);
+    }
+
+    // Save ESP32 socket
+    if (!espSocket && msg.includes("temp")) {
+      espSocket = socket;
+    }
+  });
+
+  socket.on('close', () => {
+    if (socket === espSocket) espSocket = null;
+  });
 });
