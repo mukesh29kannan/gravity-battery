@@ -3,44 +3,149 @@
 <head>
   <title>ESP32 Sensor Dashboard</title>
   <style>
-    body { font-family: Arial; padding: 20px; }
-    .card { border: 1px solid #ccc; padding: 10px; margin: 10px 0; }
-    label { display: block; margin-top: 10px; }
+    /* Reset some default */
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f0f4f8;
+      color: #333;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    h1 {
+      margin-bottom: 30px;
+      color: #0078d7;
+      letter-spacing: 1.2px;
+    }
+
+    .card {
+      background: #fff;
+      box-shadow: 0 4px 12px rgb(0 0 0 / 0.1);
+      border-radius: 12px;
+      padding: 25px 30px;
+      margin: 10px 0;
+      width: 320px;
+      transition: box-shadow 0.3s ease;
+    }
+    .card:hover {
+      box-shadow: 0 8px 24px rgb(0 0 0 / 0.15);
+    }
+
+    .card p {
+      font-size: 1.1rem;
+      margin: 10px 0;
+      display: flex;
+      justify-content: space-between;
+      font-weight: 600;
+    }
+
+    label {
+      display: flex;
+      flex-direction: column;
+      font-weight: 600;
+      margin-bottom: 20px;
+      font-size: 0.95rem;
+      color: #555;
+    }
+    input[type="number"] {
+      margin-top: 8px;
+      padding: 8px 12px;
+      font-size: 1rem;
+      border: 1.8px solid #ccc;
+      border-radius: 6px;
+      transition: border-color 0.3s ease;
+      outline-offset: 2px;
+    }
+    input[type="number"]:focus {
+      border-color: #0078d7;
+      box-shadow: 0 0 8px #0078d7aa;
+    }
+
+    button {
+      background-color: #0078d7;
+      color: white;
+      border: none;
+      padding: 12px 22px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 1rem;
+      font-weight: 600;
+      margin-right: 15px;
+      transition: background-color 0.3s ease, transform 0.2s ease;
+      user-select: none;
+      min-width: 90px;
+    }
+    button:last-child {
+      margin-right: 0;
+      background-color: #e55353;
+    }
+    button:hover {
+      background-color: #005aab;
+      transform: translateY(-2px);
+    }
+    button:last-child:hover {
+      background-color: #b83232;
+    }
+
+    @media (max-width: 400px) {
+      .card {
+        width: 90vw;
+        padding: 20px;
+      }
+      button {
+        width: 100%;
+        margin: 10px 0 0 0;
+      }
+    }
   </style>
 </head>
 <body>
   <h1>ESP32 Sensor Dashboard</h1>
 
   <div class="card">
-    <p><strong>Temperature:</strong> <span id="temp">--</span> °C</p>
-    <p><strong>Humidity:</strong> <span id="humidity">--</span> %</p>
-    <p><strong>Current:</strong> <span id="current">--</span> A</p>
-    <p><strong>Relay Status:</strong> <span id="relay">OFF</span></p>
+    <p><span>Temperature:</span> <span id="temp">--</span> °C</p>
+    <p><span>Humidity:</span> <span id="humidity">--</span> %</p>
+    <p><span>Current:</span> <span id="current">--</span> A</p>
+    <p><span>Relay Status:</span> <span id="relay">OFF</span></p>
   </div>
 
   <div class="card">
     <label>
       Max Temperature:
-      <input type="number" id="maxTemp" />
+      <input type="number" id="maxTemp" placeholder="Enter max temperature" />
     </label>
 
     <label>
       Timer (sec):
-      <input type="number" id="timer" />
+      <input type="number" id="timer" placeholder="Enter timer in seconds" />
     </label>
 
-    <button onclick="startHeater()">Start</button>
-    <button onclick="stopHeater()">Stop</button>
+    <div style="display: flex; justify-content: flex-start; flex-wrap: wrap;">
+      <button onclick="startHeater()">Start</button>
+      <button onclick="stopHeater()">Stop</button>
+    </div>
   </div>
 
   <script>
     async function fetchSensorData() {
-      const res = await fetch('/api/sensor-data');
-      const data = await res.json();
-      document.getElementById('temp').textContent = data.temp;
-      document.getElementById('humidity').textContent = data.humidity;
-      document.getElementById('current').textContent = data.current;
-      document.getElementById('relay').textContent = data.relay ? 'ON' : 'OFF';
+      try {
+        const res = await fetch('/api/sensor-data');
+        const data = await res.json();
+        document.getElementById('temp').textContent = data.temp;
+        document.getElementById('humidity').textContent = data.humidity;
+        document.getElementById('current').textContent = data.current;
+        document.getElementById('relay').textContent = data.relay ? 'ON' : 'OFF';
+      } catch (e) {
+        // handle fetch errors silently or add your own error display here
+        console.error('Failed to fetch sensor data', e);
+      }
     }
 
     async function startHeater() {

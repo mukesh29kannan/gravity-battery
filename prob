@@ -1,73 +1,89 @@
 #include <WiFi.h>
-#include <DHT.h>
-#include <WebSocketsClient.h>
+#include <HTTPClient.h>
+#include "DHT.h"
 
-// Pins
-#define DHTPIN 4
+#define DHTPIN 4         // DHT11 data pin
 #define DHTTYPE DHT11
-#define KY013PIN 34
-#define ACSPIN 35
-#define RELAYPIN 5
+#define KY013_PIN 34     // KY-013 analog pin
+#define ACS712_PIN 35    // ACS712 analog pin
+#define RELAY_PIN 26     // Relay control pin
 
-// Config
+const char* ssid = "fusion";
+const char* password = "12345678";
+const char* server = "https://gravity-battery.onrender.com";  // replace <YOUR_PC_IP>
+
 DHT dht(DHTPIN, DHTTYPE);
-WebSocketsClient webSocket;
-
-// Data
-float maxTemp = 30.0;
 bool relayState = false;
-unsigned long timerEndMillis = 0;
+unsigned long lastSend = 0;
+int sendInterval = 2000;
 
 void setup() {
   Serial.begin(115200);
+  pinMode(RELAY_PIN, OUTPUT);
+  digitalWrite(RELAY_PIN, LOW);
   dht.begin();
-  pinMode(RELAYPIN, OUTPUT);
-  digitalWrite(RELAYPIN, LOW);
 
-  WiFi.begin("fusion", "12345678");
-  while (WiFi.status() != WL_CONNECTED) delay(1000);
-
-  webSocket.begin("gravity-battery.onrender.com", 443, "/ws", "wss");
-  webSocket.onEvent(webSocketEvent);
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to WiFi...");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi Connected.");
 }
 
 void loop() {
-  webSocket.loop();
+  if (millis() - lastSend > sendInterval) {
+    lastSend = millis();
+    float humidity = dht.readHumidity();
+    float temp = dht.readTemperature();
+    float kyTemp = analogRead(KY013_PIN) * (3.3 / 4095.0) * 100.0;
+    float currentRaw = analogRead(ACS712_PIN);
+    float voltage = currentRaw * (3.3 / 4095.0);
+    float current = abs((voltage - 2.5) / 0.185); // 0.185V per amp for ACS712-5A
 
-  float temp1 = dht.readTemperature();
-  float temp2 = analogRead(KY013PIN) * (3.3 / 4095.0) * 100; // Convert as needed
-  float currentVal = analogRead(ACSPIN); // Needs conversion formula
-
-  float temp = (temp1 + temp2) / 2;
-
-  // Relay logic
-  if (millis() < timerEndMillis) {
-    if (temp >= maxTemp && relayState) {
-      digitalWrite(RELAYPIN, LOW);
-      relayState = false;
-    } else if (temp < maxTemp && !relayState) {
-      digitalWrite(RELAYPIN, HIGH);
-      relayState = true;
+    if (isnan(temp) || isnan(humidity)) {
+      Serial.println("Failed to read from DHT!");
+      return;
     }
-  } else {
-    digitalWrite(RELAYPIN, LOW);
-    relayState = false;
-  }
 
-  // Send data
-  String msg = String("{\"temp\":") + temp + ",\"humidity\":" + dht.readHumidity() + ",\"current\":" + currentVal + ",\"relay\":" + (relayState ? "1" : "0") + "}";
-  webSocket.sendTXT(msg);
+    // Fetch control settings
+    HTTPClient http;
+    http.begin(String(server) + "/api/control");
+    int httpCode = http.GET();
+    if (httpCode == 200) {
+      String payload = http.getString();
+      Serial.println("Control: " + payload);
 
-  delay(1000);
-}
+      bool start = payload.indexOf("\"start\":true") != -1;
+      int maxTempIndex = payload.indexOf("\"maxTemp\":") + 10;
+      int maxTemp = payload.substring(maxTempIndex, payload.indexOf(",", maxTempIndex)).toInt();
 
-void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
-  if (type == WStype_TEXT) {
-    String command = (char *)payload;
-    if (command.startsWith("start:")) {
-      timerEndMillis = millis() + command.substring(6).toInt() * 1000;
-    } else if (command.startsWith("maxtemp:")) {
-      maxTemp = command.substring(8).toFloat();
+      if (start && temp < maxTemp) {
+        relayState = true;
+      } else {
+        relayState = false;
+      }
+
+      digitalWrite(RELAY_PIN, relayState ? HIGH : LOW);
     }
+    http.end();
+
+    // Send sensor data
+    http.begin(String(server) + "/api/sensor-data");
+    http.addHeader("Content-Type", "application/json");
+    String json = "{\"temp\":" + String(temp, 2) +
+                  ",\"humidity\":" + String(humidity, 2) +
+                  ",\"current\":" + String(current, 2) +
+                  ",\"relay\":" + String(relayState ? "true" : "false") + "}";
+
+    httpCode = http.POST(json);
+    if (httpCode > 0) {
+      Serial.println("Data sent: " + json);
+    } else {
+      Serial.println("Failed to send data");
+    }
+    Serial.println("HTTP Response Code: " + String(httpCode));
+    http.end();
   }
 }
