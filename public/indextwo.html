@@ -18,7 +18,9 @@
   <button onclick="startTimer()">Start</button>
 
   <script>
-    const ws = new WebSocket(`ws://${location.host}/ws`);
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+    console.log(`ws://${location.host}/ws`)
     ws.onmessage = (msg) => {
       const data = JSON.parse(msg.data);
       document.getElementById('temp').innerText = data.temp.toFixed(1);
