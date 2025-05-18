@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const WebSocket = require('ws');
+const path = require('path');
 
 const app = express();
 
@@ -45,10 +46,11 @@ app.post('/api/trigger', (req, res) => {
 });
 
 app.get('/prob', (req, res) => {
-  const filePath = path.join(__dirname, 'public', `indextwo.html`);
-
+  const filePath = path.join(__dirname, 'public', 'indextwo.html');
+  console.log("Sending file from path:", filePath);
   res.sendFile(filePath, err => {
     if (err) {
+      console.error("Error sending file:", err);
       res.status(404).send('Page not found');
     }
   });
