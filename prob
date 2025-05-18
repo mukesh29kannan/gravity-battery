@@ -1,0 +1,73 @@
+#include <WiFi.h>
+#include <DHT.h>
+#include <WebSocketsClient.h>
+
+// Pins
+#define DHTPIN 4
+#define DHTTYPE DHT11
+#define KY013PIN 34
+#define ACSPIN 35
+#define RELAYPIN 5
+
+// Config
+DHT dht(DHTPIN, DHTTYPE);
+WebSocketsClient webSocket;
+
+// Data
+float maxTemp = 30.0;
+bool relayState = false;
+unsigned long timerEndMillis = 0;
+
+void setup() {
+  Serial.begin(115200);
+  dht.begin();
+  pinMode(RELAYPIN, OUTPUT);
+  digitalWrite(RELAYPIN, LOW);
+
+  WiFi.begin("fusion", "12345678");
+  while (WiFi.status() != WL_CONNECTED) delay(1000);
+
+  webSocket.begin("gravity-battery.onrender.com", 443, "/ws", "wss");
+  webSocket.onEvent(webSocketEvent);
+}
+
+void loop() {
+  webSocket.loop();
+
+  float temp1 = dht.readTemperature();
+  float temp2 = analogRead(KY013PIN) * (3.3 / 4095.0) * 100; // Convert as needed
+  float currentVal = analogRead(ACSPIN); // Needs conversion formula
+
+  float temp = (temp1 + temp2) / 2;
+
+  // Relay logic
+  if (millis() < timerEndMillis) {
+    if (temp >= maxTemp && relayState) {
+      digitalWrite(RELAYPIN, LOW);
+      relayState = false;
+    } else if (temp < maxTemp && !relayState) {
+      digitalWrite(RELAYPIN, HIGH);
+      relayState = true;
+    }
+  } else {
+    digitalWrite(RELAYPIN, LOW);
+    relayState = false;
+  }
+
+  // Send data
+  String msg = String("{\"temp\":") + temp + ",\"humidity\":" + dht.readHumidity() + ",\"current\":" + currentVal + ",\"relay\":" + (relayState ? "1" : "0") + "}";
+  webSocket.sendTXT(msg);
+
+  delay(1000);
+}
+
+void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
+  if (type == WStype_TEXT) {
+    String command = (char *)payload;
+    if (command.startsWith("start:")) {
+      timerEndMillis = millis() + command.substring(6).toInt() * 1000;
+    } else if (command.startsWith("maxtemp:")) {
+      maxTemp = command.substring(8).toFloat();
+    }
+  }
+}
