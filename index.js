@@ -84,7 +84,7 @@ app.post('/api/sensor-data', (req, res) => {
 
 app.get('/api/sensor-data', (req, res) => {
   console.log
-  res.json({...sensorData,temp:sensorData.temp});
+  res.json({...sensorData,temp:sensorData.temp-25});
 });
 
 app.get('/api/control', (req, res) => {
