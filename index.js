@@ -94,7 +94,7 @@ app.get('/api/control', (req, res) => {
 app.post('/api/control', (req, res) => {
   const { start, maxTemp, timerSeconds } = req.body;
   if (start !== undefined) controlSettings.start = start;
-  if (maxTemp !== undefined) controlSettings.maxTemp = maxTemp;
+  if (maxTemp !== undefined) controlSettings.maxTemp = ( maxTemp || 0) +25;
   if (timerSeconds !== undefined) {
     controlSettings.timerSeconds = timerSeconds;
     if (timerInterval) clearInterval(timerInterval);
